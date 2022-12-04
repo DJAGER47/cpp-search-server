@@ -117,13 +117,17 @@ private:
         return query_words;
     }
 
+    static double calculateIDF(size_t document_count, size_t word_freqs){
+      return log(static_cast<double>(document_count) / word_freqs);
+    }
+
     vector<Document> FindAllDocuments(const Query& query_words) const {
         vector<Document> matched_documents;
         map<int, double> document_to_relevance;
 
         for (const auto& word : query_words.plus){
             if (word_to_document_freqs_.count(word) != 0){
-                double IDF = log((double)document_count_ / word_to_document_freqs_.at(word).size());
+                double IDF = calculateIDF(document_count_, word_to_document_freqs_.at(word).size());
                 for (const auto& [id,TF] : word_to_document_freqs_.at(word)){
                     document_to_relevance[id] += TF * IDF;
                 }
