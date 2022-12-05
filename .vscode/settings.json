@@ -1,0 +1,9 @@
+{
+    "window.experimental.windowControlsOverlay.enabled": true,
+    "files.encoding": "windows1251",
+    "editor.tabSize": 4,
+    "editor.insertSpaces": true,
+    "editor.detectIndentation": false,
+    "git-graph.fileEncoding": "windows1251",
+    "security.workspace.trust.enabled": false,
+}

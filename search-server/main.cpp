@@ -153,7 +153,8 @@ private:
     }
 
     int ComputeAverageRating(const vector<int>& ratings) const {
-        return accumulate(ratings.begin(), ratings.end(), 0) / ratings.size();
+        int size = ratings.size();
+        return  (accumulate(ratings.begin(), ratings.end(), 0) / size);
     }
 };
 
@@ -173,17 +174,11 @@ SearchServer CreateSearchServer() {
       }
       search_server.AddDocument(document_id, ReadLine(), numbers);
     }
-
-    // search_server.SetStopWords("и в на");
-    // search_server.AddDocument(0, "белый кот и модный ошейник", {8, -3});
-    // search_server.AddDocument(1, "пушистый кот пушистый хвост", {7, 2, 7});
-    // search_server.AddDocument(2, "ухоженный пёс выразительные глаза", {5, -12, 2, 1});
     return search_server;
 }
 
 int main() {
     const SearchServer search_server = CreateSearchServer();
-    // const string query = "пушистый ухоженный кот";
     const string query = ReadLine();
     for (const auto& [document_id, relevance, ratings] : search_server.FindTopDocuments(query)) {
         cout << "{ document_id = "s << document_id << ", "
