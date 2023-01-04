@@ -579,9 +579,12 @@ void TestCalcRelevance()
     ASSERT_EQUAL(found_docs1.size(), 2u);
 
     // 0) IDF * TF = 0,4055 * 0,5  = 0,20275
-    ASSERT(abs(found_docs1[0].relevance - 0.20275) < 10e-3);
+    double relevance1 = log(3.0 / 2.0) * (1.0 / 2.0);
+    ASSERT(abs(found_docs1[0].relevance - relevance1) < 10e-6);
+
     // 1) IDF * TF = 0,4055 * 0,25 = 0,101375
-    ASSERT(abs(found_docs1[1].relevance - 0.101375) < 10e-3);
+    double relevance2 = log(3.0 / 2.0) * (1.0 / 4.0);
+    ASSERT(abs(found_docs1[1].relevance - relevance2) < 10e-6);
 }
 
 // Функция TestSearchServer является точкой входа для запуска тестов
