@@ -117,16 +117,10 @@ public:
         if (documents_.count(document_id))
             throw invalid_argument("document_id already exists");
 
-        if (!IsValidWord(document))
-            throw invalid_argument("document invalid char");
-
         const vector<string> words = SplitIntoWordsNoStop(document);
         const double inv_word_count = 1.0 / words.size();
         for (const string &word : words)
         {
-            if (!IsMinusWordVoid(word))
-                throw invalid_argument("document invalid minus word");
-
             word_to_document_freqs_[word][document_id] += inv_word_count;
         }
         documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
@@ -150,15 +144,7 @@ public:
     template <typename DocumentPredicate>
     vector<Document> FindTopDocuments(const string &raw_query, DocumentPredicate document_predicate) const
     {
-        if (!IsValidWord(raw_query))
-            throw invalid_argument("raw_query invalid char");
-
         const Query query = ParseQuery(raw_query);
-        for (const string &word : query.minus_words)
-        {
-            if (!Is2MinusWord(word))
-                throw invalid_argument("raw_query incorrect query minus words");
-        }
         vector<Document> result = FindAllDocuments(query, document_predicate);
         sort(result.begin(), result.end(),
              [](const Document &lhs, const Document &rhs)
@@ -182,30 +168,14 @@ public:
 
     int GetDocumentCount() const { return static_cast<int>(documents_.size()); }
 
-    int GetDocumentId(int index) const
-    {
-        if ((index >= 0) && (index < index2id.size()))
-        {
-            return index2id.at(index);
-        }
-        throw out_of_range("index does not exist");
-    }
+    int GetDocumentId(int index) const { return index2id.at(index); }
 
     tuple<vector<string>, DocumentStatus> MatchDocument(const string &raw_query, int document_id) const
     {
         if (document_id < 0)
             throw invalid_argument("document_id must be positive");
 
-        if (!IsValidWord(raw_query))
-            throw invalid_argument("raw_query invalid char");
-
         const Query query = ParseQuery(raw_query);
-        for (const string &word : query.minus_words)
-        {
-            if (!Is2MinusWord(word))
-                throw invalid_argument("raw_query incorrect query minus words");
-        }
-
         vector<string> matched_words;
         for (const string &word : query.plus_words)
         {
@@ -254,23 +224,6 @@ private:
                        { return c >= '\0' && c < ' '; });
     }
 
-    /// @brief Отсутствие в поисковом запросе текста после символа «минус»,  "кот -"
-    static bool IsMinusWordVoid(const string &word)
-    {
-        if ((word.length() == 1) && (word[0] == '-'))
-            return false;
-        return true;
-    }
-
-    /// @brief Отсутствие в минус словах "--"
-    static bool Is2MinusWord(const string &word)
-    {
-        if ((word.empty()) || (word[0] == '-'))
-            return false;
-        else
-            return true;
-    }
-
     bool IsStopWord(const string &word) const
     {
         return stop_words_.count(word) > 0;
@@ -283,6 +236,8 @@ private:
         {
             if (!IsStopWord(word))
             {
+                if (!IsValidWord(word))
+                    throw invalid_argument("document invalid char");
                 words.push_back(word);
             }
         }
@@ -295,11 +250,8 @@ private:
         {
             return 0;
         }
-        int rating_sum = 0;
-        for (const int rating : ratings)
-        {
-            rating_sum += rating;
-        }
+
+        int rating_sum = accumulate(ratings.begin(), ratings.end(), 0);
         return rating_sum / static_cast<int>(ratings.size());
     }
 
@@ -312,12 +264,24 @@ private:
 
     QueryWord ParseQueryWord(string text) const
     {
+        if (text.empty())
+            throw invalid_argument("word is empty");
+
+        if (!IsValidWord(text))
+            throw invalid_argument("word invalid char");
+
         bool is_minus = false;
         // Word shouldn't be empty
         if (text[0] == '-')
         {
             is_minus = true;
             text = text.substr(1);
+
+            if (text.empty())
+                throw invalid_argument("minus-words is empty");
+
+            if (text[0] == '-')
+                throw invalid_argument("incorrect query minus-words");
         }
         return {text, is_minus, IsStopWord(text)};
     }
