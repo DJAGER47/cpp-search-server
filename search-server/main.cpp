@@ -234,10 +234,11 @@ private:
         vector<string> words;
         for (const string &word : SplitIntoWords(text))
         {
+            if (!IsValidWord(word))
+                throw invalid_argument("document invalid char");
+
             if (!IsStopWord(word))
             {
-                if (!IsValidWord(word))
-                    throw invalid_argument("document invalid char");
                 words.push_back(word);
             }
         }
