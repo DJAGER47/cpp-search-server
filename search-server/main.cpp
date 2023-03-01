@@ -5,15 +5,6 @@
 
 using namespace std;
 
-std::ostream &operator<<(std::ostream &out, const Document &doc)
-{
-    out << "{ "s
-        << "document_id = "s << doc.id << ", "s
-        << "relevance = "s << doc.relevance << ", "s
-        << "rating = "s << doc.rating << " }"s;
-    return out;
-}
-
 int main()
 {
     setlocale(LC_ALL, "Russian");
