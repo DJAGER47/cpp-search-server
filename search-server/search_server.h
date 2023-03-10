@@ -4,7 +4,9 @@
 #include <set>
 #include <map>
 #include <vector>
+#include <set>
 #include "document.h"
+#include "logduration.h"
 
 class SearchServer
 {
@@ -27,10 +29,19 @@ public:
     std::vector<Document> FindTopDocuments(const std::string &raw_query, DocumentPredicate document_predicate) const;
 
     int GetDocumentCount() const { return static_cast<int>(documents_.size()); }
-
-    int GetDocumentId(int index) const { return index2id.at(index); }
+    auto begin() { return index2id_.begin(); }
+    auto end() { return index2id_.end(); }
 
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string &raw_query, int document_id) const;
+
+    /// @brief Метод получения частот слов по id документа
+    /// @param document_id
+    /// @return Если документа не существует, возвратите ссылку на пустой map
+    const std::map<std::string, double> &GetWordFrequencies(int document_id) const;
+
+    /// @brief Метод удаления документов из поискового сервера
+    /// @param document_id
+    void RemoveDocument(int document_id);
 
 private:
     struct DocumentData
@@ -41,8 +52,9 @@ private:
 
     std::set<std::string> stop_words_;
     std::map<std::string, std::map<int, double>> word_to_document_freqs_;
+    std::map<int, std::map<std::string, double>> id_to_wordfreqs_;
     std::map<int, DocumentData> documents_;
-    std::vector<int> index2id;
+    std::set<int> index2id_;
 
     /// @brief Наличие спецсимволов — то есть символов с кодами в диапазоне от 0 до 31 включительно — в тексте документов и поискового запроса.
     static bool IsValidWord(const std::string &word);

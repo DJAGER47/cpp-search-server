@@ -5,6 +5,10 @@
 #include "search_server.h"
 #include "string_processing.h"
 
+///
+/// public
+///
+
 SearchServer::SearchServer(const std::string &text)
 {
     if (!IsValidWord(text))
@@ -17,7 +21,6 @@ SearchServer::SearchServer(const std::string &text)
     }
 }
 
-/// @brief Добавить документ в поисковую базу
 void SearchServer::AddDocument(int document_id, const std::string &document, DocumentStatus status, const std::vector<int> &ratings)
 {
     // Попытка добавить документ с отрицательным id. Или уже такой id есть
@@ -32,9 +35,10 @@ void SearchServer::AddDocument(int document_id, const std::string &document, Doc
     for (const std::string &word : words)
     {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        id_to_wordfreqs_[document_id][word] += inv_word_count;
     }
     documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
-    index2id.push_back(document_id);
+    index2id_.insert(document_id);
 }
 
 std::vector<Document> SearchServer::FindTopDocuments(const std::string &raw_query, DocumentStatus status_query) const
@@ -85,7 +89,38 @@ std::tuple<std::vector<std::string>, DocumentStatus> SearchServer::MatchDocument
     return {matched_words, documents_.at(document_id).status};
 }
 
-/// @brief Наличие спецсимволов — то есть символов с кодами в диапазоне от 0 до 31 включительно — в тексте документов и поискового запроса.
+const std::map<std::string, double> &SearchServer::GetWordFrequencies(int document_id) const
+{
+    if (!id_to_wordfreqs_.count(document_id))
+    {
+        static const std::map<std::string, double> ret;
+        return ret;
+    }
+
+    return id_to_wordfreqs_.at(document_id);
+}
+
+void SearchServer::RemoveDocument(int document_id)
+{
+    if (documents_.count(document_id) == 0)
+    {
+        return;
+    }
+
+    for (auto [word, _] : id_to_wordfreqs_.at(document_id))
+    {
+        word_to_document_freqs_.at(word).erase(document_id);
+    }
+
+    documents_.erase(document_id);
+    index2id_.erase(document_id);
+    id_to_wordfreqs_.erase(document_id);
+}
+
+///
+/// private
+///
+
 bool SearchServer::IsValidWord(const std::string &word)
 {
     // A valid word must not contain special characters
