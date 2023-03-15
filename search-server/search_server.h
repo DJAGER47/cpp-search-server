@@ -105,12 +105,13 @@ SearchServer::SearchServer(const T &text)
 template <typename DocumentPredicate>
 std::vector<Document> SearchServer::FindTopDocuments(const std::string &raw_query, DocumentPredicate document_predicate) const
 {
+    const float calculation_accuracy = 1e-6;
     const Query query = ParseQuery(raw_query);
     std::vector<Document> result = FindAllDocuments(query, document_predicate);
     std::sort(result.begin(), result.end(),
               [](const Document &lhs, const Document &rhs)
               {
-                  if (std::abs(lhs.relevance - rhs.relevance) < 1e-6)
+                  if (std::abs(lhs.relevance - rhs.relevance) < calculation_accuracy)
                   {
                       return lhs.rating > rhs.rating;
                   }
