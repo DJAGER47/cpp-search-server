@@ -6,7 +6,8 @@
 #include <vector>
 #include <set>
 #include "document.h"
-#include "logduration.h"
+#include <execution>
+#include "string_processing.h"
 
 class SearchServer
 {
@@ -32,7 +33,10 @@ public:
     auto begin() { return index2id_.begin(); }
     auto end() { return index2id_.end(); }
 
-    std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string &raw_query, int document_id) const;
+    using type = std::tuple<std::vector<std::string>, DocumentStatus>;
+    type MatchDocument(const std::string raw_query, int document_id) const;
+    type MatchDocument(std::execution::sequenced_policy, const std::string raw_query, int document_id) const;
+    type MatchDocument(std::execution::parallel_policy, const std::string raw_query, int document_id) const;
 
     /// @brief ћетод получени€ частот слов по id документа
     /// @param document_id
@@ -42,6 +46,12 @@ public:
     /// @brief ћетод удалени€ документов из поискового сервера
     /// @param document_id
     void RemoveDocument(int document_id);
+
+    /// @brief ћетод удалени€ документов из поискового сервера
+    /// @param policy std::execution
+    /// @param document_id
+    template <typename ExecutionPolicy>
+    void RemoveDocument(ExecutionPolicy policy, int document_id);
 
 private:
     struct DocumentData
@@ -80,7 +90,16 @@ private:
         std::set<std::string> minus_words;
     };
 
+    struct QueryPar
+    {
+        std::vector<std::string> plus_words;
+        std::vector<std::string> minus_words;
+    };
+
     Query ParseQuery(const std::string &text) const;
+
+    template <typename ExecutionPolicy>
+    SearchServer::QueryPar ParseQueryPar(ExecutionPolicy policy, const std::string &text) const;
 
     // Existence required
     double ComputeWordInverseDocumentFreq(const std::string &word) const;
@@ -88,6 +107,10 @@ private:
     template <typename KeyMapper>
     std::vector<Document> FindAllDocuments(const Query &query, KeyMapper keymapper) const;
 };
+
+///
+/// public
+///
 
 template <typename T>
 SearchServer::SearchServer(const T &text)
@@ -105,11 +128,11 @@ SearchServer::SearchServer(const T &text)
 template <typename DocumentPredicate>
 std::vector<Document> SearchServer::FindTopDocuments(const std::string &raw_query, DocumentPredicate document_predicate) const
 {
-    const float calculation_accuracy = 1e-6;
+    const double calculation_accuracy = 1e-6;
     const Query query = ParseQuery(raw_query);
     std::vector<Document> result = FindAllDocuments(query, document_predicate);
     std::sort(result.begin(), result.end(),
-              [](const Document &lhs, const Document &rhs)
+              [calculation_accuracy](const Document &lhs, const Document &rhs)
               {
                   if (std::abs(lhs.relevance - rhs.relevance) < calculation_accuracy)
                   {
@@ -126,6 +149,67 @@ std::vector<Document> SearchServer::FindTopDocuments(const std::string &raw_quer
     }
 
     return result;
+}
+
+template <typename ExecutionPolicy>
+void SearchServer::RemoveDocument(ExecutionPolicy policy, int document_id)
+{
+    const std::map<std::string, double> &words_freqs{
+        id_to_wordfreqs_.at(document_id)};
+
+    if (!words_freqs.empty())
+    {
+        std::vector<std::string> words{words_freqs.size()};
+
+        transform(policy,
+                  words_freqs.begin(), words_freqs.end(),
+                  words.begin(),
+                  [](const auto &wf)
+                  { return wf.first; });
+
+        for_each(policy, words.begin(), words.end(),
+                 [this, document_id](const std::string &item)
+                 { word_to_document_freqs_[item].erase(document_id); });
+    }
+
+    documents_.erase(document_id);
+    index2id_.erase(document_id);
+    id_to_wordfreqs_.erase(document_id);
+}
+
+///
+/// private
+///
+
+template <typename ExecutionPolicy>
+SearchServer::QueryPar SearchServer::ParseQueryPar(ExecutionPolicy policy, const std::string &text) const
+{
+    QueryPar query;
+    for (const std::string &word : SplitIntoWords(text))
+    {
+        const QueryWord query_word = ParseQueryWord(word);
+        if (!query_word.is_stop)
+        {
+            if (query_word.is_minus)
+            {
+                query.minus_words.push_back(query_word.data);
+            }
+            else
+            {
+                query.plus_words.push_back(query_word.data);
+            }
+        }
+    }
+
+    // std::sort(policy,query.minus_words.begin(), query.minus_words.end());
+    // auto new_end_plus = std::unique(policy, query.minus_words.begin(), query.minus_words.end());
+    // query.minus_words.erase(new_end_plus, query.minus_words.end());
+
+    // std::sort(policy, query.plus_words.begin(), query.plus_words.end());
+    // new_end_plus = std::unique(policy, query.plus_words.begin(), query.plus_words.end());
+    // query.plus_words.erase(new_end_plus, query.plus_words.end());
+
+    return query;
 }
 
 template <typename KeyMapper>
