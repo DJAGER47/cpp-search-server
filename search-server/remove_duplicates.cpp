@@ -1,32 +1,45 @@
 #include "remove_duplicates.h"
+#include <iterator>
+
+template <typename Key, typename Value>
+std::set<Key> ExtractKeysFromMap(const std::map<Key, Value> &container)
+{
+    std::set<Key> out;
+
+    std::transform(container.begin(), container.end(),
+                   std::insert_iterator(out, out.begin()),
+                   [](const auto &key_value)
+                   {
+                       return key_value.first;
+                   });
+
+    return out;
+}
 
 void RemoveDuplicates(SearchServer &search_server)
 {
-    std::set<int> duplicates;
-    std::set<std::set<std::string>> docs;
+    std::set<int> duplicate_for_remove;
 
-    for (auto i = search_server.begin(); i != search_server.end(); ++i)
+    std::set<std::set<std::string_view>> verified;
+
+    for (const int document_id : search_server)
     {
-        const auto &doc = search_server.GetWordFrequencies(*i);
-        std::set<std::string> doc_words;
+        std::set<std::string_view> wordsOfDocument = ExtractKeysFromMap(
+            search_server.GetWordFrequencies(
+                document_id));
 
-        for (const auto &[word, _] : doc)
+        if (0 == verified.count(wordsOfDocument))
         {
-            doc_words.insert(word);
+            verified.insert(wordsOfDocument);
+            continue;
         }
 
-        if (docs.count(doc_words))
-        {
-            duplicates.insert(*i);
-        }
-        else
-        {
-            docs.insert(doc_words);
-        }
+        duplicate_for_remove.insert(document_id);
     }
-    for (auto id : duplicates)
+
+    for (const int id : duplicate_for_remove)
     {
-        std::cout << "Found duplicate document id " << id << std::endl;
         search_server.RemoveDocument(id);
+        std::cout << "Found duplicate document id " << id << "\n";
     }
 }

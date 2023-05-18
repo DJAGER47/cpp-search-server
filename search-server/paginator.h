@@ -30,10 +30,10 @@ public:
         }
     }
 
-    // size_t size() const
-    // {
-    //     return DocsOnPage_.size();
-    // }
+    size_t size() const
+    {
+        return DocsOnPage_.size();
+    }
     auto begin() const
     {
         return DocsOnPage_.begin();
