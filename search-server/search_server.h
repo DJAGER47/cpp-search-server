@@ -10,8 +10,9 @@
 #include "string_processing.h"
 #include "concurrent_map.h"
 
-const int MAX_RESULT_DOCUMENT_COUNT = 5;
+const uint16_t MAX_RESULT_DOCUMENT_COUNT = 5;
 const double calculation_accuracy = 1e-6;
+const uint16_t CONCURRENT_MAP_SIZE = 100;
 
 class SearchServer
 {
@@ -38,10 +39,8 @@ public:
 
     template <typename DocumentPredicate>
     std::vector<Document> FindTopDocuments(const std::string_view raw_query, DocumentPredicate document_predicate) const;
-    template <typename DocumentPredicate>
-    std::vector<Document> FindTopDocuments(const std::execution::sequenced_policy, const std::string_view raw_query, DocumentPredicate document_predicate) const;
-    template <typename DocumentPredicate>
-    std::vector<Document> FindTopDocuments(const std::execution::parallel_policy, const std::string_view raw_query, DocumentPredicate document_predicate) const;
+    template <typename ExecutionPolicy, typename DocumentPredicate>
+    std::vector<Document> FindTopDocuments(const ExecutionPolicy &policy, const std::string_view raw_query, DocumentPredicate document_predicate) const;
 
     int GetDocumentCount() const { return static_cast<int>(documents_.size()); }
     auto begin() { return index2id_.begin(); }
@@ -164,35 +163,38 @@ std::vector<Document> SearchServer::FindTopDocuments(const std::string_view raw_
 
     return result;
 }
-template <typename DocumentPredicate>
-std::vector<Document> SearchServer::FindTopDocuments(const std::execution::sequenced_policy, const std::string_view raw_query, DocumentPredicate document_predicate) const
-{
-    return FindTopDocuments(raw_query, document_predicate);
-}
-template <typename DocumentPredicate>
-std::vector<Document> SearchServer::FindTopDocuments(const std::execution::parallel_policy, const std::string_view raw_query, DocumentPredicate document_predicate) const
-{
-    const Query query = ParseQuery(raw_query);
-    std::vector<Document> result = FindAllDocuments(std::execution::par, query, document_predicate);
 
-    std::sort(std::execution::par, result.begin(), result.end(),
-              [](const Document &lhs, const Document &rhs)
-              {
-                  if (std::abs(lhs.relevance - rhs.relevance) < calculation_accuracy)
-                  {
-                      return lhs.rating > rhs.rating;
-                  }
-                  else
-                  {
-                      return lhs.relevance > rhs.relevance;
-                  }
-              });
-
-    if (result.size() > MAX_RESULT_DOCUMENT_COUNT)
+template <typename ExecutionPolicy, typename DocumentPredicate>
+std::vector<Document> SearchServer::FindTopDocuments(const ExecutionPolicy &policy, const std::string_view raw_query, DocumentPredicate document_predicate) const
+{
+    if constexpr (std::is_same_v<ExecutionPolicy, std::execution::sequenced_policy>)
     {
-        result.resize(MAX_RESULT_DOCUMENT_COUNT);
+        return FindTopDocuments(raw_query, document_predicate);
     }
-    return result;
+    else
+    {
+        const Query query = ParseQuery(raw_query, true);
+        std::vector<Document> result = FindAllDocuments(std::execution::par, query, document_predicate);
+
+        std::sort(std::execution::par, result.begin(), result.end(),
+                  [](const Document &lhs, const Document &rhs)
+                  {
+                      if (std::abs(lhs.relevance - rhs.relevance) < calculation_accuracy)
+                      {
+                          return lhs.rating > rhs.rating;
+                      }
+                      else
+                      {
+                          return lhs.relevance > rhs.relevance;
+                      }
+                  });
+
+        if (result.size() > MAX_RESULT_DOCUMENT_COUNT)
+        {
+            result.resize(MAX_RESULT_DOCUMENT_COUNT);
+        }
+        return result;
+    }
 }
 
 template <typename ExecutionPolicy>
@@ -267,7 +269,7 @@ std::vector<Document> SearchServer::FindAllDocuments(const Query &query, Documen
 template <typename DocumentPredicate>
 std::vector<Document> SearchServer::FindAllDocuments(const std::execution::parallel_policy, const Query &query, DocumentPredicate document_predicate) const
 {
-    ConcurrentMap<int, double> document_to_relevance{128};
+    ConcurrentMap<int, double> document_to_relevance{CONCURRENT_MAP_SIZE};
     std::for_each(std::execution::par, query.plus_words.begin(), query.plus_words.end(),
                   [this, &document_to_relevance, &document_predicate](const std::string_view word)
                   {
