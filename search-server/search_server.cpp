@@ -38,12 +38,30 @@ std::vector<Document> SearchServer::FindTopDocuments(const std::string_view raw_
         raw_query, [status_query](int document_id, DocumentStatus status, int rating)
         { return status == status_query; });
 }
+std::vector<Document> SearchServer::FindTopDocuments(const std::execution::sequenced_policy, const std::string_view raw_query, DocumentStatus status_query) const
+{
+    return FindTopDocuments(raw_query, status_query);
+}
+std::vector<Document> SearchServer::FindTopDocuments(const std::execution::parallel_policy, const std::string_view raw_query, DocumentStatus status_query) const
+{
+    return FindTopDocuments(
+        std::execution::par, raw_query, [status_query](int document_id, DocumentStatus status, int rating)
+        { return status == status_query; });
+}
 
 std::vector<Document> SearchServer::FindTopDocuments(const std::string_view raw_query) const
 {
     return FindTopDocuments(
         raw_query, [](int document_id, DocumentStatus status, int rating)
         { return status == DocumentStatus::ACTUAL; });
+}
+std::vector<Document> SearchServer::FindTopDocuments(const std::execution::sequenced_policy, const std::string_view raw_query) const
+{
+    return FindTopDocuments(raw_query);
+}
+std::vector<Document> SearchServer::FindTopDocuments(const std::execution::parallel_policy, const std::string_view raw_query) const
+{
+    return FindTopDocuments(std::execution::par, raw_query, DocumentStatus::ACTUAL);
 }
 
 std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDocument(const std::string_view raw_query, int document_id) const
@@ -54,7 +72,7 @@ std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDoc
         throw std::out_of_range{"Document id in not exsist: " + std::to_string(document_id)};
     }
 
-    Query query{ParseQuery(raw_query)};
+    Query query = ParseQuery(raw_query);
 
     const std::map<std::string_view, double> &words_freqs{
         id_to_wordfreqs_.at(document_id)};
@@ -93,7 +111,7 @@ std::tuple<std::vector<std::string_view>, DocumentStatus> SearchServer::MatchDoc
     if (words_freqs.empty())
         return {std::vector<std::string_view>{}, documents_.at(document_id).status};
 
-    const QueryPar query{ParseQueryPar(raw_query)};
+    const Query query = ParseQuery(raw_query, false);
 
     auto checker = [&](const std::string_view word)
     {
@@ -215,30 +233,9 @@ SearchServer::QueryWordView SearchServer::ParseQueryWord(std::string_view text) 
     return {text, is_minus, IsStopWord(text)};
 }
 
-SearchServer::Query SearchServer::ParseQuery(const std::string_view text) const
+SearchServer::Query SearchServer::ParseQuery(const std::string_view text, bool sort) const
 {
     Query query;
-    for (auto word : SplitIntoWordsView(text))
-    {
-        const QueryWordView query_word = ParseQueryWord(word);
-        if (!query_word.is_stop)
-        {
-            if (query_word.is_minus)
-            {
-                query.minus_words.insert(query_word.data);
-            }
-            else
-            {
-                query.plus_words.insert(query_word.data);
-            }
-        }
-    }
-    return query;
-}
-
-SearchServer::QueryPar SearchServer::ParseQueryPar(const std::string_view text) const
-{
-    QueryPar query;
     for (const std::string_view &word : SplitIntoWordsView(text))
     {
         const QueryWordView query_word = ParseQueryWord(word);
@@ -254,6 +251,18 @@ SearchServer::QueryPar SearchServer::ParseQueryPar(const std::string_view text) 
             }
         }
     }
+
+    if (sort)
+    {
+        std::sort(query.minus_words.begin(), query.minus_words.end());
+        auto end_minus = std::unique(query.minus_words.begin(), query.minus_words.end());
+        query.minus_words.resize(end_minus - query.minus_words.begin());
+
+        std::sort(query.plus_words.begin(), query.plus_words.end());
+        auto end_plus = std::unique(query.plus_words.begin(), query.plus_words.end());
+        query.plus_words.resize(end_plus - query.plus_words.begin());
+    }
+
     return query;
 }
 
